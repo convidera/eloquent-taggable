@@ -68,5 +68,5 @@ return [
      *
      * @see Illuminate\Database\Schema\Blueprint
      */
-    'taggableIdType'  => 'uuid',
+    'taggableIdType'  => 'unsignedInteger',
 ];
