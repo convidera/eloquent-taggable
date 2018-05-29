@@ -16,6 +16,7 @@ class CreateTaggableTable extends Migration
     public function up()
     {
         $connection = config('taggable.connection');
+        $taggableIdType = mb_strtolower(config('taggable.taggableIdType'));
 
         if (!Schema::connection($connection)->hasTable('taggable_tags')) {
             Schema::connection($connection)->create('taggable_tags', function(Blueprint $table) {
@@ -29,9 +30,10 @@ class CreateTaggableTable extends Migration
         }
 
         if (!Schema::connection($connection)->hasTable('taggable_taggables')) {
-            Schema::connection($connection)->create('taggable_taggables', function(Blueprint $table) {
+            Schema::connection($connection)->create('taggable_taggables', function(Blueprint $table)
+            use ($taggableIdType) {
                 $table->unsignedInteger('tag_id');
-                $table->unsignedInteger('taggable_id');
+                $table->$taggableIdType('taggable_id');
                 $table->string('taggable_type');
                 $table->timestamps();
 

@@ -60,4 +60,13 @@ return [
      * then update the configuration below.
      */
     'model'  => \Cviebrock\EloquentTaggable\Models\Tag::class,
+
+    /**
+     * Allows setting the data type of the taggable id.
+     * This is helpful if the id of the models you want to tag has a different datatype than unsignedInt e.g uuid
+     * The data type MUST be one of laravel's supported Schema types.
+     *
+     * @see Illuminate\Database\Schema\Blueprint
+     */
+    'taggableIdType'  => 'uuid',
 ];
