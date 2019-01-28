@@ -1,5 +1,16 @@
 # Changelog
 
+## 3.4.1 - 04-Sep-2018
+
+- de-tag models when they are deleted, to help keep the 
+  polymorphic table under control (#78, @pierrocknroll)
+
+
+## 3.4.0 - 04-Sep-2018
+
+- Laravel 5.7 support
+
+
 ## 3.3.2 - 21-May-2018
 
 - bump dependency versions
