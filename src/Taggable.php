@@ -1,6 +1,9 @@
 <?php namespace Cviebrock\EloquentTaggable;
 
+use Cviebrock\EloquentTaggable\Events\ModelTagged;
+use Cviebrock\EloquentTaggable\Events\ModelUntagged;
 use Cviebrock\EloquentTaggable\Exceptions\NoTagsSpecifiedException;
+use Cviebrock\EloquentTaggable\Models\Tag;
 use Cviebrock\EloquentTaggable\Services\TagService;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Collection;
@@ -15,13 +18,19 @@ use Illuminate\Database\Query\JoinClause;
  */
 trait Taggable
 {
+    /**
+     * Property to control sequence on alias
+     *
+     * @var int
+     */
+    private $taggableAliasSequence = 0;
 
     /**
      * Boot the trait.
      *
      * Listen for the deleting event of a model, then remove the relation between it and tags
      */
-    protected static function bootTaggable()
+    protected static function bootTaggable(): void
     {
         static::deleting(function ($model) {
             if (!method_exists($model, 'runSoftDelete') || $model->isForceDeleting()) {
@@ -38,7 +47,8 @@ trait Taggable
     public function tags(): MorphToMany
     {
         $model = config('taggable.model');
-        return $this->morphToMany($model, 'taggable', 'taggable_taggables', 'taggable_id', 'tag_id')
+        $table = config('taggable.tables.taggable_taggables', 'taggable_taggables');
+        return $this->morphToMany($model, 'taggable', $table, 'taggable_id', 'tag_id')
             ->withTimestamps();
     }
 
@@ -47,9 +57,9 @@ trait Taggable
      *
      * @param string|array $tags
      *
-     * @return $this
+     * @return self
      */
-    public function tag($tags)
+    public function tag($tags): self
     {
         $tags = app(TagService::class)->buildTagArray($tags);
 
@@ -57,6 +67,8 @@ trait Taggable
             $this->addOneTag($tagName);
             $this->load('tags');
         }
+
+        event(new ModelTagged($this, $tags));
 
         return $this;
     }
@@ -66,15 +78,17 @@ trait Taggable
      *
      * @param string|array $tags
      *
-     * @return $this
+     * @return self
      */
-    public function untag($tags)
+    public function untag($tags): self
     {
         $tags = app(TagService::class)->buildTagArray($tags);
 
         foreach ($tags as $tagName) {
             $this->removeOneTag($tagName);
         }
+
+        event(new ModelUntagged($this, $tags));
 
         return $this->load('tags');
     }
@@ -84,9 +98,9 @@ trait Taggable
      *
      * @param string|array $tags
      *
-     * @return $this
+     * @return self
      */
-    public function retag($tags)
+    public function retag($tags): self
     {
         return $this->detag()->tag($tags);
     }
@@ -94,9 +108,9 @@ trait Taggable
     /**
      * Remove all tags from the model.
      *
-     * @return $this
+     * @return self
      */
-    public function detag()
+    public function detag(): self
     {
         $this->tags()->sync([]);
 
@@ -108,12 +122,13 @@ trait Taggable
      *
      * @param string $tagName
      */
-    protected function addOneTag(string $tagName)
+    protected function addOneTag(string $tagName): void
     {
+        /** @var Tag $tag */
         $tag = app(TagService::class)->findOrCreate($tagName);
         $tagKey = $tag->getKey();
 
-        if (!$this->tags->contains($tagKey)) {
+        if (!$this->getAttribute('tags')->contains($tagKey)) {
             $this->tags()->attach($tagKey);
         }
     }
@@ -123,7 +138,7 @@ trait Taggable
      *
      * @param string $tagName
      */
-    protected function removeOneTag(string $tagName)
+    protected function removeOneTag(string $tagName): void
     {
         $tag = app(TagService::class)->find($tagName);
 
@@ -173,6 +188,24 @@ trait Taggable
     }
 
     /**
+     * Determine if a given tag is attached to the model.
+     *
+     * @param Tag|string $tag
+     *
+     * @return bool
+     */
+    public function hasTag($tag): bool
+    {
+        if ($tag instanceof Tag) {
+            $normalized = $tag->getAttribute('normalized');
+        } else {
+            $normalized = app(TagService::class)->normalize($tag);
+        }
+
+        return in_array($normalized, $this->getTagArrayNormalizedAttribute(), true);
+    }
+
+    /**
      * Query scope for models that have all of the given tags.
      *
      * @param Builder $query
@@ -206,11 +239,12 @@ trait Taggable
             return $query->where(\DB::raw(1), 0);
         }
 
-        $morphTagKeyName = $this->tags()->getQualifiedRelatedPivotKeyName();
+        $alias = $this->taggableCreateNewAlias(__FUNCTION__);
+        $morphTagKeyName = $this->getQualifiedRelatedPivotKeyNameWithAlias($alias);
 
-        return $this->prepareTableJoin($query, 'inner')
+        return $this->prepareTableJoin($query, 'inner', $alias)
             ->whereIn($morphTagKeyName, $tagKeys)
-            ->havingRaw("COUNT({$morphTagKeyName}) = ?", [count($tagKeys)]);
+            ->havingRaw("COUNT(DISTINCT {$morphTagKeyName}) = ?", [count($tagKeys)]);
     }
 
     /**
@@ -241,9 +275,10 @@ trait Taggable
 
         $tagKeys = $service->getTagModelKeys($normalized);
 
-        $morphTagKeyName = $this->tags()->getQualifiedRelatedPivotKeyName();
+        $alias = $this->taggableCreateNewAlias(__FUNCTION__);
+        $morphTagKeyName = $this->getQualifiedRelatedPivotKeyNameWithAlias($alias);
 
-        return $this->prepareTableJoin($query, 'inner')
+        return $this->prepareTableJoin($query, 'inner', $alias)
             ->whereIn($morphTagKeyName, $tagKeys);
     }
 
@@ -256,7 +291,8 @@ trait Taggable
      */
     public function scopeIsTagged(Builder $query): Builder
     {
-        return $this->prepareTableJoin($query, 'inner');
+        $alias = $this->taggableCreateNewAlias(__FUNCTION__);
+        return $this->prepareTableJoin($query, 'inner', $alias);
     }
 
     /**
@@ -277,9 +313,10 @@ trait Taggable
         $tagKeys = $service->getTagModelKeys($normalized);
         $tagKeyList = implode(',', $tagKeys);
 
-        $morphTagKeyName = $this->tags()->getQualifiedRelatedPivotKeyName();
+        $alias = $this->taggableCreateNewAlias(__FUNCTION__);
+        $morphTagKeyName = $this->getQualifiedRelatedPivotKeyNameWithAlias($alias);
 
-        $query = $this->prepareTableJoin($query, 'left')
+        $query = $this->prepareTableJoin($query, 'left', $alias)
             ->havingRaw("COUNT(DISTINCT CASE WHEN ({$morphTagKeyName} IN ({$tagKeyList})) THEN {$morphTagKeyName} ELSE NULL END) < ?",
                 [count($tagKeys)]);
 
@@ -308,9 +345,10 @@ trait Taggable
         $tagKeys = $service->getTagModelKeys($normalized);
         $tagKeyList = implode(',', $tagKeys);
 
-        $morphTagKeyName = $this->tags()->getQualifiedRelatedPivotKeyName();
+        $alias = $this->taggableCreateNewAlias(__FUNCTION__);
+        $morphTagKeyName = $this->getQualifiedRelatedPivotKeyNameWithAlias($alias);
 
-        $query = $this->prepareTableJoin($query, 'left')
+        $query = $this->prepareTableJoin($query, 'left', $alias)
             ->havingRaw("COUNT(DISTINCT CASE WHEN ({$morphTagKeyName} IN ({$tagKeyList})) THEN {$morphTagKeyName} ELSE NULL END) = 0");
 
         if (!$includeUntagged) {
@@ -329,9 +367,10 @@ trait Taggable
      */
     public function scopeIsNotTagged(Builder $query): Builder
     {
-        $morphForeignKeyName = $this->tags()->getQualifiedForeignPivotKeyName();
+        $alias = $this->taggableCreateNewAlias(__FUNCTION__);
+        $morphForeignKeyName = $this->getQualifiedForeignPivotKeyNameWithAlias($alias);
 
-        return $this->prepareTableJoin($query, 'left')
+        return $this->prepareTableJoin($query, 'left', $alias)
             ->havingRaw("COUNT(DISTINCT {$morphForeignKeyName}) = 0");
     }
 
@@ -341,12 +380,15 @@ trait Taggable
      *
      * @return Builder
      */
-    private function prepareTableJoin(Builder $query, string $joinType): Builder
+    private function prepareTableJoin(Builder $query, string $joinType, string $alias): Builder
     {
-        $modelKeyName = $this->getQualifiedKeyName();
         $morphTable = $this->tags()->getTable();
-        $morphForeignKeyName = $this->tags()->getQualifiedForeignPivotKeyName();
-        $morphTypeName = $morphTable . '.' . $this->tags()->getMorphType();
+        $morphTableAlias = $morphTable.'_'.$alias;
+
+        $modelKeyName = $this->getQualifiedKeyName();
+        $morphForeignKeyName = $this->getQualifiedForeignPivotKeyNameWithAlias($alias);
+
+        $morphTypeName = $morphTableAlias.'.'. $this->tags()->getMorphType();
         $morphClass = $this->tags()->getMorphClass();
 
         $closure = function(JoinClause $join) use ($modelKeyName, $morphForeignKeyName, $morphTypeName, $morphClass) {
@@ -356,7 +398,7 @@ trait Taggable
 
         return $query
             ->select($this->getTable() . '.*')
-            ->join($morphTable, $closure, null, null, $joinType)
+            ->join($morphTable.' as '.$morphTableAlias, $closure, null, null, $joinType)
             ->groupBy($modelKeyName);
     }
 
@@ -436,5 +478,50 @@ trait Taggable
         $tags = app(TagService::class)->getPopularTags($limit, static::class, $minCount);
 
         return $tags->pluck('taggable_count', 'normalized')->all();
+    }
+
+    /**
+     * Returns the Related Pivot Key Name with the table alias.
+     *
+     * @param string $alias
+     *
+     * @return string
+     */
+    private function getQualifiedRelatedPivotKeyNameWithAlias(string $alias): string
+    {
+        $morph = $this->tags();
+
+        return $morph->getTable() . '_' . $alias .
+            '.' . $morph->getRelatedPivotKeyName();
+    }
+
+    /**
+     * Returns the Foreign Pivot Key Name with the table alias.
+     *
+     * @param string $alias
+     *
+     * @return string
+     */
+    private function getQualifiedForeignPivotKeyNameWithAlias(string $alias): string
+    {
+        $morph = $this->tags();
+
+        return $morph->getTable() . '_' . $alias .
+            '.' . $morph->getForeignPivotKeyName();
+    }
+
+    /**
+     * Create a new alias to use on scopes to be able to combine many scopes
+     *
+     * @param string $scope
+     * 
+     * @return string
+     */
+    private function taggableCreateNewAlias(string $scope): string
+    {
+        $this->taggableAliasSequence++;
+        $alias = strtolower($scope) . '_' . $this->taggableAliasSequence;
+
+        return $alias;
     }
 }

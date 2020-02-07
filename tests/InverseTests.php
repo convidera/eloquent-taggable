@@ -81,7 +81,7 @@ class InverseTests extends TestCase
     /**
      * @inheritdoc
      */
-    public function setUp()
+    public function setUp(): void
     {
         parent::setUp();
 
@@ -104,7 +104,7 @@ class InverseTests extends TestCase
     /**
      * Test finding a model via tag.
      */
-    public function testTagFindModels()
+    public function testTagFindModels(): void
     {
         // load the tag
         $tag = Tag::findByName('Banana');
@@ -139,7 +139,7 @@ class InverseTests extends TestCase
     /**
      * Test finding a model via tag.
      */
-    public function testTagFindModelsNonExistent()
+    public function testTagFindModelsNonExistent(): void
     {
         // First ensure the tag exists, but isn't attached to any model
         $this->testModel1->tag('Fig');

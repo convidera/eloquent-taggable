@@ -13,15 +13,21 @@ abstract class TestCase extends Orchestra
     /**
      * @inheritdoc
      */
-    public function setUp()
+    public function setUp(): void
     {
         parent::setUp();
 
-        $this->artisan('migrate', ['--database' => 'test']);
+        $this->setUpDatabase();
 
-        $this->beforeApplicationDestroyed(function() {
-            $this->artisan('migrate:rollback');
+        $this->beforeApplicationDestroyed(static function() {
+            (new \CreateTestModelsTable())->down();
+            (new \CreateTaggableTable())->down();
         });
+    }
+
+    public function tearDown(): void
+    {
+        parent::tearDown();
     }
 
     /**
@@ -57,10 +63,10 @@ abstract class TestCase extends Orchestra
      * @param array $expected
      * @param array $actual
      */
-    protected function assertArrayValuesAreEqual(array $expected, array $actual)
+    protected function assertArrayValuesAreEqual(array $expected, array $actual): void
     {
-        $this->assertEquals(count($expected), count($actual));
-        $this->assertEquals($expected, $actual, '', 0.0, 10, true);
+        $this->assertCount(count($expected), $actual);
+        $this->assertEqualsCanonicalizing($expected, $actual);
     }
 
     /**
@@ -70,7 +76,7 @@ abstract class TestCase extends Orchestra
      *
      * @return \Cviebrock\EloquentTaggable\Test\TestModel
      */
-    protected function newModel(array $data = ['title' => 'test'])
+    protected function newModel(array $data = ['title' => 'test']): TestModel
     {
         return TestModel::create($data);
     }
@@ -82,8 +88,20 @@ abstract class TestCase extends Orchestra
      *
      * @return \Cviebrock\EloquentTaggable\Test\TestDummy
      */
-    protected function newDummy(array $data = ['title' => 'dummy'])
+    protected function newDummy(array $data = ['title' => 'dummy']): TestDummy
     {
         return TestDummy::create($data);
+    }
+
+    /**
+     * Set up the database
+     */
+    private function setUpDatabase(): void
+    {
+        include_once __DIR__.'/../resources/database/migrations/create_taggable_table.php.stub';
+        (new \CreateTaggableTable())->up();
+
+        include_once __DIR__.'/database/migrations/2013_11_04_163552_create_test_models_table.php';
+        (new \CreateTestModelsTable())->up();
     }
 }

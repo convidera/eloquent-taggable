@@ -1,9 +1,9 @@
 # Eloquent-Taggable
 
-Easily add the ability to tag your Eloquent models in Laravel 5.
+Easily add the ability to tag your Eloquent models in Laravel 6.
 
-> **NOTE**: These instructions are for Laravel 5.7.  If you are using Laravel 5.6, please
-> see the [previous version docs](https://github.com/cviebrock/eloquent-taggable/tree/3.3).
+> **NOTE**: These instructions are for Laravel 6.0.  If you are using Laravel 5.8, please
+> see the [previous version's docs](https://github.com/cviebrock/eloquent-taggable/tree/3.5).
 
 [![Build Status](https://travis-ci.org/cviebrock/eloquent-taggable.svg?branch=master&format=flat)](https://travis-ci.org/cviebrock/eloquent-taggable)
 [![Total Downloads](https://poser.pugx.org/cviebrock/eloquent-taggable/downloads?format=flat)](https://packagist.org/packages/cviebrock/eloquent-taggable)
@@ -29,23 +29,26 @@ Easily add the ability to tag your Eloquent models in Laravel 5.
 
 ## Installation
 
-> **NOTE**: Depending on your version of Laravel, you should install a different
-> version of the package:
-> 
-> | Laravel Version | Package Version |
-> |:---------------:|:---------------:|
-> |       5.7       |     3.4.*       |
-> |       5.6       |     3.3.*       |
-> |       5.5       |     3.2.*       |
-> |       5.4       |     3.1.*†      |
->
-> † Version 3.1 of the package requires PHP 7.0 or later, even though Laravel 5.4 doesn't.
->
-> Older versions of Laravel can use older versions of the package, although they 
-> are no longer supported or maintained.  See [CHANGELOG.md](CHANGELOG.md) and
-> [UPGRADING.md](UPGRADING.md) for specifics, and be sure that you are reading 
-> the correct README.md for your version (Github displays the version in 
-> the _master_ branch by default, which might not be what you want).
+Depending on your version of Laravel, you should install a different
+version of the package.  **NOTE**: As of version 6.0, the package's 
+version should match the Laravel version.
+
+| Laravel Version | Package Version |
+|:---------------:|:---------------:|
+|       6.0       |     6.0.*       |
+|       5.8       |     3.5.*       |
+|       5.7       |     3.4.*       |
+|       5.6       |     3.3.*       |
+|       5.5       |     3.2.*       |
+|       5.4       |     3.1.*†      |
+
+† Version 3.1 of the package requires PHP 7.0 or later, even though Laravel 5.4 doesn't.
+
+Older versions of Laravel can use older versions of the package, although they
+are no longer supported or maintained.  See [CHANGELOG.md](CHANGELOG.md) and
+[UPGRADING.md](UPGRADING.md) for specifics, and be sure that you are reading
+the correct README.md for your version (Github displays the version in
+the _master_ branch by default, which might not be what you want).
 
 
 1. Install the `cviebrock/eloquent-taggable` package via composer:
@@ -53,22 +56,34 @@ Easily add the ability to tag your Eloquent models in Laravel 5.
     ```sh
     $ composer require cviebrock/eloquent-taggable
     ```
-    
+
     The package will automatically register its service provider.
 
 2. Publish the configuration file:
 
     ```sh
-    php artisan vendor:publish --provider="Cviebrock\EloquentTaggable\ServiceProvider"
+    php artisan vendor:publish --provider="Cviebrock\EloquentTaggable\ServiceProvider" --tag "config"
     ```
 
-3. Finally, use artisan to run the migration to create the required tables:
+3. Publish the migrations:
+
+    ```sh
+    php artisan vendor:publish --provider="Cviebrock\EloquentTaggable\ServiceProvider" --tag "migrations"
+    ```
+
+If you modify the migrations, keep in mind that you can add more fields,
+but shouldn't remove any existing ones.
+
+Also note that if you want to change the table names used for the package, this
+should be done in the configuration file (under the `tables` key).
+
+4. Finally, use artisan to run the migration to create the required tables:
 
     ```sh
     composer dump-autoload
     php artisan migrate
     ```
-    
+
    (Note that the migration file isn't published to your application, but will run anyway.)
 
 
@@ -169,6 +184,20 @@ var_dump($model->tagList);
 // string 'Apple' (length=5)
 ```
 
+You can also see if a model has a certain tag:
+
+```php
+$model->tag('Apple,Banana,Cherry');
+
+// tests use the normalized tag name
+
+var_dump($model->hasTag('apple'));
+// bool(true)
+
+var_dump($model->hasTag('Durian'));
+// bool(false)
+```
+
 
 ## Query Scopes
 
@@ -241,7 +270,7 @@ Model::isNotTagged()->get();
 Some edge-case examples:
 
 ```php
-// Passing an empty tag list to a scope either throws an 
+// Passing an empty tag list to a scope either throws an
 // exception or returns nothing, depending on the
 // "throwEmptyExceptions" configuration option
 
@@ -252,6 +281,33 @@ Model::withAnyTags('');
 // so no model has that tag
 
 Model::withAllTags('Apple,Fig');
+```
+
+Combining scopes:
+
+```php
+// Find models with any one of the given tags
+// i.e. everything tagged "Apple OR Banana"
+// but without one of the given tags 
+// i.e. everything NOT tagged "Cherry".
+// (returns Ids: 2, 3, 6, 7, 8)
+
+Model::withAnyTags('Apple,Banana')::withoutAnyTags('Cherry')->get();
+
+// Find models that are not tagged with all of the given tags,
+// i.e. everything not tagged "Apple AND Banana".
+// and models without any one of the given tags
+// i.e. everything not tagged "Cherry OR Durian".
+// (returns models with Ids: 2)
+
+Model::withoutAllTags('Apple,Banana')::withoutAnyTags('Cherry,Durian')->get();
+
+// Find models with any one of the given tags
+// i.e. everything tagged "Apple OR Banana".
+// AND tagged "Cherry OR Durian".
+// (returns Ids: 4, 6, 7, 8)
+
+Model::withAnyTags('Apple,Banana')::withAnyTags('Cherry,Durian')->get();
 ```
 
 Finally, you can easily find all the tags used across all instances of a model:
@@ -271,6 +327,50 @@ Model::allTagsList();
 
 Model::allTagModels();
 ```
+
+## Events
+
+You can create a listener to handle when a model is Tagged:
+
+```php
+// in your EventServiceProvider 
+
+use Cviebrock\EloquentTaggable\Events\ModelTagged;
+...
+protected $listen = [
+    ...
+    ModelTagged::class => [
+        ReactModelTagged::class  // your Listener class
+    ]
+    ...
+];
+```
+
+The listener receives the `Cviebrock\EloquentTaggable\Events\ModelTagged` event
+with the model and tags:
+
+```php
+namespace App\Listeners;
+
+use Cviebrock\EloquentTaggable\Events\ModelTagged;
+
+class ReactModelTagged
+{
+    /**
+     * Handle the event.
+     *
+     * @param  ModelTagged  $event
+     * @return void
+     */
+    public function handle(ModelTagged $event)
+    {
+        dd($event->getModel(), $event->getTags());
+    }
+}
+```
+
+You can use also listen for the `Cviebrock\EloquentTaggable\Events\ModelUntagged` event
+which is fired when a tag is removed.
 
 
 ## Other Methods
@@ -315,7 +415,7 @@ popular tag across all models, see the example below under the [TagService Class
 
 There are a few methods you can run on the Tag model itself.
 
-`Tag::findByName('Apple')` will return the Tag model for the given name.  This can 
+`Tag::findByName('Apple')` will return the Tag model for the given name.  This can
 then be chained to find all the related models.
 
 Under the hood, the above uses a `byName()` query scope on the Tag model, which you
@@ -377,6 +477,10 @@ return [
     'throwEmptyExceptions' => false,
     'taggedModels'         => [],
     'model'                => \Cviebrock\EloquentTaggable\Models\Tag::class,
+    'tables' => [
+        'taggable_tags'      => 'taggable_tags',
+        'taggable_taggables' => 'taggable_taggables',
+    ],
 ];
 ```
 
@@ -406,8 +510,8 @@ var_dump($model->tagList);
 
 ### normalizer
 
-Each tag is "normalized" before being stored in the database.  This is so that variations in the 
-spelling or capitalization of tags don't generate duplicate tags.  For example, we don't want three 
+Each tag is "normalized" before being stored in the database.  This is so that variations in the
+spelling or capitalization of tags don't generate duplicate tags.  For example, we don't want three
 different tags in the following case:
 
 ```php
@@ -416,8 +520,8 @@ $model->tag('APPLE');
 $model->tag('apple');
 ```
 
-Normalization happens by passing each tag name through a normalizer function.  By default, this is 
-PHP's `mb_strtolower()` function, but you can change this to any function or callable that takes a 
+Normalization happens by passing each tag name through a normalizer function.  By default, this is
+PHP's `mb_strtolower()` function, but you can change this to any function or callable that takes a
 single string value and returns a string value.  Some ideas:
 
 ```php
@@ -434,8 +538,8 @@ single string value and returns a string value.  Some ideas:
     'normalizer' => ['Illuminate\Support\Str', 'slug'],
 ```
 
-You can access the normalized values of the tags through `$model->tagListNormalized` and 
-`$model->tagArrayNormalized`, which work identically to `$model->tagList` and `$model->tagArray` 
+You can access the normalized values of the tags through `$model->tagListNormalized` and
+`$model->tagArrayNormalized`, which work identically to `$model->tagList` and `$model->tagArray`
 (described above) except that they return the normalized values instead.
 
 And you can, of course, access the normalized name directly from a tag:
@@ -454,11 +558,11 @@ Otherwise, it will use the default connection (i.e. from `config('database.defau
 Passing empty strings or arrays to any of the scope methods is an interesting situation.
 Logically, you can't get a list of models that have all or any of a list of tags ... if the list is empty!
 
-By default, the `throwEmptyExceptions` is set to false.  Passing an empty value to a query scope 
-will "short-circuit" the query and return no models.  This makes your application code cleaner 
+By default, the `throwEmptyExceptions` is set to false.  Passing an empty value to a query scope
+will "short-circuit" the query and return no models.  This makes your application code cleaner
 so you don't need to check for empty values before calling the scope.
 
-However, if `throwEmptyExceptions` is set to true, then passing an empty value to the scope will 
+However, if `throwEmptyExceptions` is set to true, then passing an empty value to the scope will
 throw a `Cviebrock\EloquentTaggable\Exceptions\NoTagsSpecifiedException` exception in these cases.
 You can then catch the exception in your application code and handle it however you like.
 
@@ -487,33 +591,39 @@ This will return a collection of all the Posts that are tagged "Apple".
 ### model
 
 By default, the package will use it's own model class for Tags.  If you want to
-use your own customized Tag model, then extend the package's class with 
-your own class, and update the configuration to reference your model. 
+use your own customized Tag model, then extend the package's class with
+your own class, and update the configuration to reference your model.
+
+### tables
+
+By default, the package will create two tables to store the tag information.
+If you want to use different table names, then change these two values.  The 
+model, service, and migration classes will all read the configuration values.
 
 
 
 ## Bugs, Suggestions, Contributions and Support
 
 Thanks to [everyone](https://github.com/cviebrock/eloquent-taggable/graphs/contributors)
-who has contributed to this project, with a big shout-out to 
-[Michael Riediger](https://stackoverflow.com/users/502502/riedsio) for help optimizing the SQL. 
+who has contributed to this project, with a big shout-out to
+[Michael Riediger](https://stackoverflow.com/users/502502/riedsio) for help optimizing the SQL.
 
-Special thanks to 
-[JetBrains](https://www.jetbrains.com/?from=cviebrock/eloquent-taggable) for their 
+Special thanks to
+[JetBrains](https://www.jetbrains.com/?from=cviebrock/eloquent-taggable) for their
 Open Source License Program ... and the excellent PHPStorm IDE, of course!
 
 [![JetBrains](./.github/jetbrains.svg)](https://www.jetbrains.com/?from=cviebrock/eloquent-taggable)
 
-Please use [Github](https://github.com/cviebrock/eloquent-taggable) for reporting bugs, 
+Please use [Github](https://github.com/cviebrock/eloquent-taggable) for reporting bugs,
 and making comments or suggestions.
- 
+
 See [CONTRIBUTING.md](CONTRIBUTING.md) for how to contribute changes.
 
 
 ## Copyright and License
 
 [eloquent-taggable](https://github.com/cviebrock/eloquent-taggable)
-was written by [Colin Viebrock](http://viebrock.ca) and is released under the 
+was written by [Colin Viebrock](http://viebrock.ca) and is released under the
 [MIT License](LICENSE.md).
 
 Copyright (c) 2013 Colin Viebrock

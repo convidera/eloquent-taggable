@@ -4,6 +4,7 @@ use Cviebrock\EloquentTaggable\Services\TagService;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\MorphToMany;
+use Illuminate\Support\Arr;
 
 
 /**
@@ -15,7 +16,7 @@ class Tag extends Model
     /**
      * @inheritdoc
      */
-    protected $table = 'taggable_tags';
+    protected $table;
 
     /**
      * @inheritdoc
@@ -38,6 +39,9 @@ class Tag extends Model
         if ($connection = config('taggable.connection')) {
             $this->setConnection($connection);
         }
+
+        $table = config('taggable.tables.taggable_tags', 'taggable_tags');
+        $this->setTable($table);
 
         parent::__construct($attributes);
     }
@@ -80,7 +84,7 @@ class Tag extends Model
         }
 
         // Check if the relation is defined via configuration
-        $relatedClass = array_get(config('taggable.taggedModels'), $key);
+        $relatedClass = Arr::get(config('taggable.taggedModels'), $key);
 
         if ($relatedClass) {
             $relation = $this->taggedModels($relatedClass);
@@ -101,7 +105,9 @@ class Tag extends Model
      */
     protected function taggedModels(string $class): MorphToMany
     {
-        return $this->morphedByMany($class, 'taggable', 'taggable_taggables', 'tag_id');
+        $table = config('taggable.tables.taggable_taggables', 'taggable_taggables');
+
+        return $this->morphedByMany($class, 'taggable', $table, 'tag_id');
     }
 
     /**

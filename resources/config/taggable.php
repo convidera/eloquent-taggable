@@ -69,4 +69,13 @@ return [
      * @see Illuminate\Database\Schema\Blueprint
      */
     'taggableIdType'  => 'unsignedInteger',
+
+    /**
+     * The tables used to store the tags in the database.  You can
+     * publish the package's migrations and use custom names.
+     */
+    'tables' => [
+        'taggable_tags'      => 'taggable_tags',
+        'taggable_taggables' => 'taggable_taggables',
+    ]
 ];

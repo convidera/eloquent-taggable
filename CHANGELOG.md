@@ -1,5 +1,47 @@
 # Changelog
 
+## 6.0.2 - 19-Jan-2020
+
+- several improvements from #99 & #104
+  - make migrations publishable
+  - use bigUnsignedIntegers for key columns
+  - make table names customizable
+  
+
+## 6.0.1 - 13-Sep-2019
+
+- fix for semantic versioning
+
+
+## 6.0.0 - 03-Sep-2019
+
+- Laravel 6.0 support (note the package version will now follow the Laravel version)
+
+
+## 3.5.3 - 24-Apr-2019
+
+- add ability to chain scopes (#97, @devguar)
+
+
+## 3.5.2 - 08-Apr-2019
+
+- add `ModelTagged` and `ModelUntagged` events (#95, @devguar)
+
+
+## 3.5.1 - 16-Mar-2019
+
+- add `hasTag()` method (#87, suggestion by @MordiSacks)
+- add ability to combine scopes (#90, @devguar)
+- clean up method return value declarations
+
+
+## 3.5.0 - 28-Feb-2019
+
+- Laravel 5.8 support
+- fix `getAllTags()`, `getUnusedTags()` and `getPopularTags()` 
+  when using a table prefix (#84, @tuxfamily)
+
+
 ## 3.4.1 - 04-Sep-2018
 
 - de-tag models when they are deleted, to help keep the 
