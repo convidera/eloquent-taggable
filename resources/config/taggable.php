@@ -68,7 +68,7 @@ return [
      *
      * @see Illuminate\Database\Schema\Blueprint
      */
-    'taggableIdType'  => 'unsignedInteger',
+    'taggableIdType'  => 'unsignedBigInteger',
 
     /**
      * The tables used to store the tags in the database.  You can

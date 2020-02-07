@@ -16,7 +16,7 @@ class CreateTaggableTable extends Migration
         $connection = config('taggable.connection');
         $taggableTagsTable = config('taggable.tables.taggable_tags', 'taggable_tags');
         $taggableTaggablesTable = config('taggable.tables.taggable_taggables', 'taggable_taggables');
-        $taggableIdType = mb_strtolower(config('taggable.taggableIdType'));
+        $taggableIdType = (config('taggable.taggableIdType', 'unsignedBigInteger'));
 
         if (!Schema::connection($connection)->hasTable($taggableTagsTable)) {
             Schema::connection($connection)->create($taggableTagsTable, static function(Blueprint $table) {
